@@ -1,3 +1,12 @@
+Based on the GRBL 1.1g for the Arduino Mega this version ports GRBL on to the ATmega2561.
+
+The ATmega2561 is a smaller version of the ATmega2560 found on the Arduino Mega. it boasts the same amount of flash, EEPROM and ram, but does have less pins compaired to the ATmega2560. However the chip is avalible in a TQFP64 package with 0.8mm pin spacing making it easier for hand soldering on to a custom board.
+
+Because the ATmega2561 has less pins I have had to move the spindle PWM pin on to timer3B and sleep on to timer2. Sleep is now on an 8bit timer! other changes are that I have had to move the limit pins on to external interrupt (INT) rather than keeping them on the pin change interrupt (PCINT)
+
+Some of the pins I have used have not been broken out on the Arduino Mega, so this code will not run on on the Arduino Mega with out reverting back some of the changes.
+
+
 ![GitHub Logo](https://github.com/gnea/gnea-Media/blob/master/Grbl%20Logo/Grbl%20Logo%20250px.png?raw=true)
 ***
 _Click the `Release` tab to download pre-compiled `.hex` files or just [click here](https://github.com/gnea/grbl-Mega/releases)_
