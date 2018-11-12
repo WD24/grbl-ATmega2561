@@ -58,8 +58,8 @@ void limits_init()
     #endif
     #ifndef DISABLE_HW_LIMITS
       if (bit_istrue(settings.flags,BITFLAG_HARD_LIMIT_ENABLE)) {
-        LIMIT_PCMSK |= LIMIT_MASK; // Enable specific pins of the Pin Change Interrupt
-        PCICR |= (1 << LIMIT_INT); // Enable Pin Change Interrupt
+        EIMSK |= LIMIT_MASK; // Enable specific pins of the Pin Change Interrupt
+        EICRB |=  (X_LIMIT_TRIGGER | Y_LIMIT_TRIGGER | Z_LIMIT_TRIGGER);//Trigger Functions
       } else {
         limits_disable();
       }
@@ -79,8 +79,8 @@ void limits_init()
     #endif
 
     if (bit_istrue(settings.flags,BITFLAG_HARD_LIMIT_ENABLE)) {
-      LIMIT_PCMSK |= LIMIT_MASK; // Enable specific pins of the Pin Change Interrupt
-      PCICR |= (1 << LIMIT_INT); // Enable Pin Change Interrupt
+      EIMSK |= LIMIT_MASK; // Enable specific pins of the Pin Change Interrupt
+      EICRB |=  (X_LIMIT_TRIGGER | Y_LIMIT_TRIGGER | Z_LIMIT_TRIGGER);//Trigger Functions
     } else {
       limits_disable();
     }
@@ -99,12 +99,12 @@ void limits_disable()
 {
   #ifdef DEFAULTS_RAMPS_BOARD
     #ifndef DISABLE_HW_LIMITS
-     LIMIT_PCMSK &= ~LIMIT_MASK;  // Disable specific pins of the Pin Change Interrupt
-     PCICR &= ~(1 << LIMIT_INT);  // Disable Pin Change Interrupt
+     EIMSK &= ~LIMIT_MASK;  // Disable specific pins of the Pin Change Interrupt
+	 EICRB &= ~(X_LIMIT_TRIGGER | Y_LIMIT_TRIGGER | Z_LIMIT_TRIGGER);//Disable Trigger Functions
     #endif
   #else
-    LIMIT_PCMSK &= ~LIMIT_MASK;  // Disable specific pins of the Pin Change Interrupt
-    PCICR &= ~(1 << LIMIT_INT);  // Disable Pin Change Interrupt
+    EIMSK &= ~LIMIT_MASK;  // Disable specific pins of the Pin Change Interrupt
+	EICRB &= ~(X_LIMIT_TRIGGER | Y_LIMIT_TRIGGER | Z_LIMIT_TRIGGER);//Disable Trigger Functions
   #endif // DEFAULTS_RAMPS_BOARD
 }
 #ifdef DEFAULTS_RAMPS_BOARD  
@@ -178,7 +178,7 @@ uint8_t limits_get_state()
 // special pinout for an e-stop, but it is generally recommended to just directly connect
 // your e-stop switch to the Arduino reset pin, since it is the most correct way to do this.
   #ifndef ENABLE_SOFTWARE_DEBOUNCE
-    ISR(LIMIT_INT_vect) // DEFAULT: Limit pin change interrupt process. 
+    ISR(X_LIMIT_INT_vect) // DEFAULT: Limit pin change interrupt process. 
     {
       // Ignore limit switches if already in an alarm state or in-process of executing an alarm.
       // When in the alarm state, Grbl should have been reset or will force a reset, so any pending 
@@ -199,10 +199,54 @@ uint8_t limits_get_state()
           #endif
         }
       }
-    }  
+    }
+	ISR(Y_LIMIT_INT_vect) // DEFAULT: Limit pin change interrupt process.
+	{
+		// Ignore limit switches if already in an alarm state or in-process of executing an alarm.
+		// When in the alarm state, Grbl should have been reset or will force a reset, so any pending
+		// moves in the planner and serial buffers are all cleared and newly sent blocks will be
+		// locked out until a homing cycle or a kill lock command. Allows the user to disable the hard
+		// limit setting if their limits are constantly triggering after a reset and move their axes.
+		if (sys.state != STATE_ALARM) {
+			if (!(sys_rt_exec_alarm)) {
+				#ifdef HARD_LIMIT_FORCE_STATE_CHECK
+				// Check limit pin state.
+				if (limits_get_state()) {
+					mc_reset(); // Initiate system kill.
+					system_set_exec_alarm(EXEC_ALARM_HARD_LIMIT); // Indicate hard limit critical event
+				}
+				#else
+				mc_reset(); // Initiate system kill.
+				system_set_exec_alarm(EXEC_ALARM_HARD_LIMIT); // Indicate hard limit critical event
+				#endif
+			}
+		}
+	}
+	ISR(Z_LIMIT_INT_vect) // DEFAULT: Limit pin change interrupt process.
+	{
+		// Ignore limit switches if already in an alarm state or in-process of executing an alarm.
+		// When in the alarm state, Grbl should have been reset or will force a reset, so any pending
+		// moves in the planner and serial buffers are all cleared and newly sent blocks will be
+		// locked out until a homing cycle or a kill lock command. Allows the user to disable the hard
+		// limit setting if their limits are constantly triggering after a reset and move their axes.
+		if (sys.state != STATE_ALARM) {
+			if (!(sys_rt_exec_alarm)) {
+				#ifdef HARD_LIMIT_FORCE_STATE_CHECK
+				// Check limit pin state.
+				if (limits_get_state()) {
+					mc_reset(); // Initiate system kill.
+					system_set_exec_alarm(EXEC_ALARM_HARD_LIMIT); // Indicate hard limit critical event
+				}
+				#else
+				mc_reset(); // Initiate system kill.
+				system_set_exec_alarm(EXEC_ALARM_HARD_LIMIT); // Indicate hard limit critical event
+				#endif
+			}
+		}
+	}  
   #else // OPTIONAL: Software debounce limit pin routine.
     // Upon limit pin change, enable watchdog timer to create a short delay. 
-    ISR(LIMIT_INT_vect) { if (!(WDTCSR & (1<<WDIE))) { WDTCSR |= (1<<WDIE); } }
+    ISR(X_LIMIT_INT_vect) { if (!(WDTCSR & (1<<WDIE))) { WDTCSR |= (1<<WDIE); } }
     ISR(WDT_vect) // Watchdog timer ISR
     {
       WDTCSR &= ~(1<<WDIE); // Disable watchdog timer. 
@@ -216,7 +260,37 @@ uint8_t limits_get_state()
         }  
       }
     }
+	ISR(Y_LIMIT_INT_vect) { if (!(WDTCSR & (1<<WDIE))) { WDTCSR |= (1<<WDIE); } }
+	ISR(WDT_vect) // Watchdog timer ISR
+	{
+		WDTCSR &= ~(1<<WDIE); // Disable watchdog timer.
+		if (sys.state != STATE_ALARM) {  // Ignore if already in alarm state.
+			if (!(sys_rt_exec_alarm)) {
+				// Check limit pin state.
+				if (limits_get_state()) {
+					mc_reset(); // Initiate system kill.
+					system_set_exec_alarm(EXEC_ALARM_HARD_LIMIT); // Indicate hard limit critical event
+				}
+			}
+		}
+	}
+	ISR(Z_LIMIT_INT_vect) { if (!(WDTCSR & (1<<WDIE))) { WDTCSR |= (1<<WDIE); } }
+	ISR(WDT_vect) // Watchdog timer ISR
+	{
+		WDTCSR &= ~(1<<WDIE); // Disable watchdog timer.
+		if (sys.state != STATE_ALARM) {  // Ignore if already in alarm state.
+			if (!(sys_rt_exec_alarm)) {
+				// Check limit pin state.
+				if (limits_get_state()) {
+					mc_reset(); // Initiate system kill.
+					system_set_exec_alarm(EXEC_ALARM_HARD_LIMIT); // Indicate hard limit critical event
+				}
+			}
+		}
+	}
   #endif
+  
+  
 #endif // DEFAULTS_RAMPS_BOARD
 
 #ifdef DEFAULTS_RAMPS_BOARD
