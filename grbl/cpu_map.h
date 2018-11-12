@@ -105,7 +105,7 @@
   #define COOLANT_FLOOD_BIT   2 // PF2
   #define COOLANT_MIST_DDR    DDRF
   #define COOLANT_MIST_PORT   PORTF
-  #define COOLANT_MIST_BIT    3 // PF9
+  #define COOLANT_MIST_BIT    3 // PF3
 
   // Define user-control CONTROLs (cycle start, reset, feed hold) input pins.
   // NOTE: All CONTROLs pins must be on the same port and not on a port with other input pins (limits).
